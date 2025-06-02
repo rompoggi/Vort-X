@@ -6,6 +6,7 @@ from openai import OpenAI
 from pydantic import BaseModel
 import requests
 import json
+from pypdf import PdfReader
 
 BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
 COLLECTION_NAME = "moodle_pdfs"
@@ -39,12 +40,15 @@ class Body(BaseModel):
 @app.post("/")
 async def root(body: Body):
     # TODO add "download from moodle" feature / know when to refresh the collection
+    
     # TODO dont give chunk ID but global position in PDF
-    # TODO ping endroit en particulier dans le texte avec les top k chunks
+    
+    # TODO /web search
 
     prompt, command = parse_command(body.prompt)
 
     collection_id = await get_collection_id()
+    #collection_id = await refresh_moodle_collection(collection_id)
     
     # Get the top k chunks from the RAG service
     print("Getting RAG chunks...")
@@ -56,6 +60,7 @@ async def root(body: Body):
         chunk_file_sources.append({
             "file_name": chunk_dict["metadata"]["document_name"],
             "chunk_id": chunk_dict["id"],
+            "content": chunk_dict["content"],
         })
 
     # Get the full chunk
@@ -75,17 +80,28 @@ async def root(body: Body):
     }
     response = client.chat.completions.create(**data)
 
+    # History ici, vu que l'apply command n'est pas un résultat du LLM
+    write_history(prompt, response.choices[0].message.content)    
+
+    print("Applying special command if any...")
     answer = apply_command(response.choices[0].message.content, command, chunk_file_sources)
-
-    if command != "reset":
-        write_history(prompt, answer)
-
+    print("Returning answer...")
     return answer
 
 if __name__ == "__main__":
     print("Starting FastAPI server...")
     uvicorn.run(app, host="localhost", port=8000)
     
+def read_pdf(file_name: str):
+    moodle_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moodle_pdfs")
+    reader = PdfReader(os.path.join(moodle_dir, file_name))
+    print(f"Reading PDF file: {os.path.join(moodle_dir, file_name)}")
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text() + "\n"
+    print(f"Read {len(reader.pages)} pages from PDF file.")
+    return text
+
 def read_history():
     """
     Read the history from the history.json file.
@@ -123,14 +139,48 @@ def write_history(prompt: str, response: str):
     with open(history_file, "w") as f:
         json.dump(history, f)
 
+
+def pdf_lines_from_chunks(chunk_file_sources: list):
+    # Read the PDF file
+    pdf_content = dict()
+    for chunk_file_source in chunk_file_sources:
+        file_name = chunk_file_source["file_name"]
+        if file_name not in pdf_content.keys():
+            pdf_content[file_name] = read_pdf(file_name)
+    
+    # initialize the line number dictionary
+    line_numbers = dict()
+
+    for chunk_file_source in chunk_file_sources:
+        # skip first word to avoid cutting issues
+        chunk = chunk_file_source["content"]
+        chunk = chunk.split(" ", 1)[-1].strip()
+
+        line = None
+        
+        # Find the chunk in the PDF content with naive string search
+        for i in range(len(pdf_content[chunk_file_source["file_name"]]) - len(chunk) + 1):
+            if pdf_content[chunk_file_source["file_name"]][i:i + len(chunk)] == chunk:
+                print(f"Found chunk {chunk_file_source['chunk_id']} in file {chunk_file_source['file_name']} at line {i}")
+                line = pdf_content[chunk_file_source["file_name"]][:i].count("\n") + 1
+                break
+        
+        line_numbers[chunk_file_source["chunk_id"]] = line
+    
+    return line_numbers
+
 def apply_command(response: str, command: str, chunk_file_sources: list):
     if command is None:
         return response
     elif command == "source":
         # If the command is "source", we return the sources of the chunks
         sources = []
-        for chunk_file_source in chunk_file_sources:
-            sources.append(f"File: {chunk_file_source['file_name']}, Chunk ID: {chunk_file_source['chunk_id']}")
+        line_sources = pdf_lines_from_chunks(chunk_file_sources)
+        for i, chunk_file_source in enumerate(chunk_file_sources):
+            if line_sources[chunk_file_source['chunk_id']] is not None:
+                sources.append(f"File: {chunk_file_source['file_name']}, from line {line_sources[chunk_file_source['chunk_id']]} onwards.")
+            else:
+                sources.append(f"File: {chunk_file_source['file_name']}, match not found, chunk ID: {chunk_file_source['chunk_id']}.")
         return response + "\n\nSources used :\n" + "\n".join(sources)
     elif command == "reset":
         with open("history.json", "w") as f:
@@ -207,6 +257,8 @@ async def refresh_moodle_collection(collection_id: int):
         data = {"request": '{"collection": "%s"}' % collection_id}
         response = session.post(f"{BASE_URL}/files", data=data, files=files)
         assert response.status_code == 201
+    
+    return collection_id
 
     
 async def get_rag_chunks(prompt: str, collection_id : int, k: int = 6, cosine_similarity_minimum: float = 0.5):
@@ -215,9 +267,15 @@ async def get_rag_chunks(prompt: str, collection_id : int, k: int = 6, cosine_si
     session.headers = {"Authorization": f"Bearer {API_KEY}"}
 
     # Get the top k chunks from the RAG service
-    data = {"collections": [collection_id], "k": k, "prompt": prompt, "method": "semantic", "score_threshold": cosine_similarity_minimum}
+    data = {"collections": [collection_id], "k": k, "prompt": prompt, "method": "semantic"}
     response = session.post(url=f"{BASE_URL}/search", json=data)
 
-    chunks_dicts_list = [result["chunk"] for result in response.json()["data"]]
-    return chunks_dicts_list
+    #chunks_dicts_list = [result["chunk"] for result in response.json()["data"]]
+    
+    thresholded_chunks_dicts_list = []
+    for result_chunk in response.json()["data"]:
+        if result_chunk["score"] >= cosine_similarity_minimum:
+            thresholded_chunks_dicts_list.append(result_chunk["chunk"])
+
+    return thresholded_chunks_dicts_list
 
