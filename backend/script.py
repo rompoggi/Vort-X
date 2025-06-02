@@ -5,8 +5,11 @@ import os
 from openai import OpenAI
 from pydantic import BaseModel
 
+# LOAD API KEYS
+import dotenv
+dotenv.load_dotenv()
 BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
-API_KEY="YOUR_KEY"
+API_KEY = os.getenv("API_KEY")
 
 app = FastAPI()
 
