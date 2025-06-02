@@ -11,6 +11,8 @@ BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
 COLLECTION_NAME = "moodle_pdfs"
 MAX_HISTORY_CHARS = 3000
 MAX_MESSAGES_HISTORY = 20
+COMMAND_PREFIX = "/"
+
 # import API from backend/api_key.secret which is a .txt file containing the API key
 # so we read backend/api_key.secret file
 with open("backend/api_key.secret", "r") as f:
@@ -37,7 +39,6 @@ class Body(BaseModel):
 @app.post("/")
 async def root(body: Body):
     # TODO add "download from moodle" feature / know when to refresh the collection
-    # TODO add store history feature
     # TODO dont give chunk ID but global position in PDF
     # TODO ping endroit en particulier dans le texte avec les top k chunks
 
@@ -144,7 +145,7 @@ def parse_command(prompt: str):
     Parse the command from the prompt.
     """
     command = None
-    if prompt.startswith("/"):
+    if prompt.startswith(COMMAND_PREFIX):
         # Keep the first word as the command
         command = prompt.split()[0][1:]
         prompt = prompt[len(command) + 2:]  # Remove the command and the space after it
