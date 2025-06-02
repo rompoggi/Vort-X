@@ -5,6 +5,7 @@ import os
 from openai import OpenAI
 from pydantic import BaseModel
 import requests
+import json
 
 BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
 COLLECTION_NAME = "moodle_pdfs"
@@ -60,22 +61,55 @@ async def root(body: Body):
     # Call the OpenAI API with the full chunk and the prompt
     print("Calling OpenAI API...")
     client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
+    messages = read_history()
+    messages.append({"role": "tool", "content": full_chunk_rag})
+    messages.append({"role": "user", "content": prompt})
     data = {
         "model": "albert-small",
-        "messages": [{"role": "tool", "content": full_chunk_rag}, {"role": "user", "content": prompt}],
+        "messages": messages,
         "stream": False,
         "n": 1,
     }
     response = client.chat.completions.create(**data)
 
+    answer = apply_command(response.choices[0].message.content, command, chunk_file_sources)
 
+    write_history(prompt, answer)
 
-    return apply_command(response.choices[0].message.content, command, chunk_file_sources)
+    return answer
 
 if __name__ == "__main__":
     print("Starting FastAPI server...")
     uvicorn.run(app, host="localhost", port=8000)
     
+def read_history():
+    """
+    Read the history from the history.json file.
+    """
+    history_file = "history.json"
+    if not os.path.exists(history_file):
+        return []
+    
+    with open(history_file, "r") as f:
+        history = json.load(f)
+    
+    return history
+
+def write_history(prompt: str, response: str):
+    """
+    Write the prompt and response to the history.json file.
+    """
+    history_file = "history.json"
+    history = read_history()
+    
+    # Append the new entry
+    history.append({"role": "user", "content": prompt})
+    history.append({"role": "assistant", "content": response})
+    
+    # Write the updated history back to the file
+    with open(history_file, "w") as f:
+        json.dump(history, f)
+
 def apply_command(response: str, command: str, chunk_file_sources: list):
     if command is None:
         return response
