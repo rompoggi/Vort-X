@@ -28,6 +28,7 @@ class Body(BaseModel):
 
 @app.post("/")
 async def root(body: Body):
+    # TODO add RAG from the server-side storage
     client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
     data = {
         "model": "albert-small",
