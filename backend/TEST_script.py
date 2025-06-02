@@ -9,6 +9,8 @@ import json
 
 BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
 COLLECTION_NAME = "moodle_pdfs"
+MAX_HISTORY_CHARS = 3000
+MAX_MESSAGES_HISTORY = 20
 # import API from backend/api_key.secret which is a .txt file containing the API key
 # so we read backend/api_key.secret file
 with open("backend/api_key.secret", "r") as f:
@@ -74,7 +76,8 @@ async def root(body: Body):
 
     answer = apply_command(response.choices[0].message.content, command, chunk_file_sources)
 
-    write_history(prompt, answer)
+    if command != "reset":
+        write_history(prompt, answer)
 
     return answer
 
@@ -106,6 +109,15 @@ def write_history(prompt: str, response: str):
     history.append({"role": "user", "content": prompt})
     history.append({"role": "assistant", "content": response})
     
+        # Make sure the history does not exceed the MAX_TOKEN_HISTORY
+    # Compute total number of characters in the history
+    total_chars = sum(len(entry["content"]) for entry in history)
+    # On garde au minimum 4 entries (2 user and 2 assistant) pour le contexte
+    while (total_chars > MAX_HISTORY_CHARS and len(history) > 4) or len(history) > MAX_MESSAGES_HISTORY * 2:
+        # Remove the oldest entry (the first one)
+        total_chars -= len(history[0]["content"]) + len(history[1]["content"])
+        history = history[2:]  # Remove the first user and assistant entries
+
     # Write the updated history back to the file
     with open(history_file, "w") as f:
         json.dump(history, f)
@@ -119,6 +131,10 @@ def apply_command(response: str, command: str, chunk_file_sources: list):
         for chunk_file_source in chunk_file_sources:
             sources.append(f"File: {chunk_file_source['file_name']}, Chunk ID: {chunk_file_source['chunk_id']}")
         return response + "\n\nSources used :\n" + "\n".join(sources)
+    elif command == "reset":
+        with open("history.json", "w") as f:
+            json.dump([], f)
+        return "History reset."
     else:
         # If the command is not recognized, we return the response as is
         return f"Command '{command}' not recognized. Response: {response}"
@@ -132,6 +148,7 @@ def parse_command(prompt: str):
         # Keep the first word as the command
         command = prompt.split()[0][1:]
         prompt = prompt[len(command) + 2:]  # Remove the command and the space after it
+    
     return prompt, command
 
 async def get_collection_id():
