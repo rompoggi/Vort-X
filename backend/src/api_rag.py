@@ -89,7 +89,7 @@ async def root(body: Body):
     
     # Get the top k chunks from the RAG service
     if DEBUG: print("Getting RAG chunks...")
-    chunks_dict_list = await get_rag_chunks(prompt, collection_id, k=6)
+    chunks_dict_list = await get_rag_chunks(prompt, collection_id, k=5)
     
     # Source the chunks from the RAG service
     chunk_file_sources = []
@@ -339,7 +339,7 @@ async def refresh_moodle_collection(collection_id: int):
     return collection_id
 
 
-async def get_rag_chunks(prompt: str, collection_id : int, k: int = 6, cosine_similarity_minimum: float = 0.5):
+async def get_rag_chunks(prompt: str, collection_id : int, k: int = 5, cosine_similarity_minimum: float = 0.5):
     # Connect to the session
     session = requests.session()
     session.headers = {"Authorization": f"Bearer {API_KEY}"}
