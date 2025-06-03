@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 from src.api_basic import api_basic
 from src.api_rag import api_rag
 
