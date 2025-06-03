@@ -64,8 +64,6 @@ from pypdf import PdfReader
 @app.post("/")
 async def root(body: Body):
     # TODO add "download from moodle" feature / know when to refresh the collection
-    
-    # TODO /web search
 
     prompt, command = parse_command(body.prompt)
 
@@ -85,6 +83,8 @@ async def root(body: Body):
             "content": chunk_dict["content"],
         })
 
+    if command == "find":
+        return {"response": "\n".join(sources_from_chunks(chunk_file_sources))}
 
     # Get the full chunk
     full_chunk_rag = "\n\n\n".join([chunk_dict["content"] for chunk_dict in chunks_dict_list])
@@ -111,7 +111,6 @@ async def root(body: Body):
     answer = apply_command(response.choices[0].message.content, command, chunk_file_sources)
     if DEBUG: print("Returning answer...")
     return {"response": answer}
-
 
 def DEBUG_write_file_from_string(file_name: str, content: str, utf_8 : bool = False):
     """
@@ -211,23 +210,29 @@ def pdf_lines_from_chunks(chunk_file_sources: list):
 
     return line_numbers
 
+def sources_from_chunks(chunk_file_sources: list):
+    sources = []
+    line_sources = pdf_lines_from_chunks(chunk_file_sources)
+    for i, chunk_file_source in enumerate(chunk_file_sources):
+        if line_sources[chunk_file_source['chunk_id']] is not None:
+            sources.append(f"File: {chunk_file_source['file_name']}, around {line_sources[chunk_file_source['chunk_id']]}.")
+        else:
+            sources.append(f"File: {chunk_file_source['file_name']}, line not found (common in LaTeX pdfs).")
+    return sources
+
 def apply_command(response: str, command: str, chunk_file_sources: list):
     if command is None:
         return response
     elif command == "source":
         # If the command is "source", we return the sources of the chunks
-        sources = []
-        line_sources = pdf_lines_from_chunks(chunk_file_sources)
-        for i, chunk_file_source in enumerate(chunk_file_sources):
-            if line_sources[chunk_file_source['chunk_id']] is not None:
-                sources.append(f"File: {chunk_file_source['file_name']}, around {line_sources[chunk_file_source['chunk_id']]}.")
-            else:
-                sources.append(f"File: {chunk_file_source['file_name']}, line not found (common in LaTeX pdfs).")
+        sources = sources_from_chunks(chunk_file_sources)
         return response + "\n\nSources used :\n" + "\n".join(sources)
     elif (command == "reset"):
         with open(HISTORY_FILE_NAME, "w") as f:
             json.dump([], f)
         return "History reset."
+    elif (command == "find" or command == "help"):
+        raise Exception(f"The '{command}' command should be handled separately.")
     else:
         # If the command is not recognized, we return the response as is
         return f"Command '{command}' not recognized. Response: {response}"
