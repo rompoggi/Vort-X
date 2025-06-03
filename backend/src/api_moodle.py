@@ -106,14 +106,12 @@ def create_moodle_config(
         "download_linked_files": download_linked_files,
         "download_also_with_cookie": download_also_with_cookie
     }
-    #file_path = config_path + '/' + config_file_name
     # Clean file path creation with os
     file_path = os.path.join(os.path.abspath(config_path), config_file_name)
     with open(file_path, 'w') as f:
         json.dump(config, f, indent=4)
     
     print(f"Configuration sauvegardée dans {file_path}")
-
 
 
 def get_moodle_token(username: str, password: str, moodle_url: str = "https://moodle.polytechnique.fr") -> str:
@@ -137,11 +135,9 @@ def get_moodle_token(username: str, password: str, moodle_url: str = "https://mo
     try:
         # Envoi de la requête POST
         response = requests.post(token_url)
-        #response.raise_for_status()  # Lève une exception pour les codes HTTP d'erreur
         
         # Extraction du token
         json_response = response.json()
-        #print(json_response)
        
         return json_response
         
@@ -216,7 +212,6 @@ def get_user_courses(moodle_url, token, user_id):
     response = requests.get(endpoint, params=params)
     response.raise_for_status()
     return [c['id'] for c in response.json()]
-     
 
 def download_new_files(
     download_path: str,
@@ -255,11 +250,11 @@ def download_new_files(
     token = token_dict['token']
     private_token = token_dict['privatetoken']
     courses_id = get_user_courses(moodle_url=moodle_url, token = token, user_id= get_user_id(moodle_url,token))
-    #now that we have all variables we create the config:
+    # Now that we have all variables we create the config:
     moodle_domain = moodle_url.replace('https://', '').replace('http://', '')
     create_moodle_config(download_path, token, private_token, moodle_domain, courses_id)
     print(download_path)
-    subprocess.run(['moodle-dl', '-p', "./" + download_path])
+    subprocess.run(['moodle-dl', '-p', download_path])
     subprocess.run(['moodle-dl'])
     print("Téléchargement terminé")
     # Flatten the directory structure after download
@@ -331,91 +326,6 @@ def download_all_files(
         download_linked_files=download_linked_files,
         download_also_with_cookie=download_also_with_cookie
     )
-    # save_credentials(
-    #     save_path=download_path,
-    #     moodle_url=moodle_url,
-    #     username=username
-    # )
-
-# def save_credentials(
-#     save_path: str,
-#     moodle_url: str,
-#     username: str,
-# ):
-#     """
-#     Sauvegarde la configuration dans un fichier JSON.
-    
-#     Args:
-#         download_path: Chemin où les fichiers seront téléchargés
-#         moodle_url: URL de la plateforme Moodle, ex "https://moodle.polytechnique.fr"
-#         username: Nom d'utilisateur Moodle
-#         password: Mot de passe Moodle
-#     """
-#     config = {
-#         "moodle_url": moodle_url,
-#         "username": username,
-#     }
-    
-#     with open(os.path.join(save_path, 'credentials.json'), 'w') as f:
-#         json.dump(config, f, indent=4)
-
-# def load_credentials(save_path: str):
-#     """
-#     Charge la configuration depuis un fichier JSON.
-    
-#     Args:
-#         save_path: Chemin où le fichier de configuration est sauvegardé
-#     Returns:
-#         dict: Dictionnaire contenant les informations de configuration
-#     """
-#     with open(os.path.join(save_path, '/credentials.json'), 'r') as f:
-#         config = json.load(f)
-    
-#     return ( config['username'], config['moodle_url'])
-
-# def reset_RAG_data(
-#     download_path: str,
-#     password: str,
-# ):
-#     """
-#     Met à jour le fichier de configuration avec les nouvelles informations.
-    
-#     Args:
-#         download_path: Chemin où les fichiers seront téléchargés
-#         moodle_url: URL de la plateforme Moodle, ex "https://moodle.polytechnique.fr"
-#         username: Nom d'utilisateur Moodle
-#         password: Mot de passe Moodle
-#         config_file_name: Nom du fichier de configuration (par défaut "config.json")
-#     """
-#     username, moodle_url = load_credentials(download_path)
-#     download_all_files(
-#         download_path=download_path,
-#         moodle_url=moodle_url,
-#         username=username,
-#         password=password,
-#     )
-
-# def update_RAG_data(
-#     download_path: str,
-#     password: str,
-# ):
-#     """
-#     Met à jour le fichier de configuration avec les nouvelles informations.
-    
-#     Args:
-#         download_path: Chemin où les fichiers seront téléchargés
-#         moodle_url: URL de la plateforme Moodle, ex "https://moodle.polytechnique.fr"
-#         username: Nom d'utilisateur Moodle
-#         password: Mot de passe Moodle
-#         config_file_name: Nom du fichier de configuration (par défaut "config.json")
-#     """
-#     username, moodle_url = load_credentials(download_path)
-#     download_new_files(
-#         download_path=download_path,
-#         moodle_url=moodle_url,
-#         username=username,
-#         password=password,
-#     )
 
 ###########################
 # LOAD API KEYS
@@ -476,7 +386,7 @@ async def root(body: BodyMoodle):
 
 def api_moodle():
     if DEBUG: print("Starting FastAPI server...")
-    uvicorn.run(app, host="localhost", port=8000)
+    uvicorn.run(app, host="localhost", port=8001)
 
 if __name__ == "__main__":
     api_moodle()
