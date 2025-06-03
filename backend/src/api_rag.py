@@ -2,6 +2,7 @@
 # LOAD API KEYS
 import os
 import dotenv
+import re
 dotenv.load_dotenv()
 BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
 API_KEY = os.getenv("API_KEY")
@@ -200,12 +201,14 @@ def pdf_lines_from_chunks(chunk_file_sources: list):
     pdf_content = dict()
     pdf_newline_count = dict()
     pdf_content_alpha = dict()
+    pdf_alpha_indices = dict()
     for chunk_file_source in chunk_file_sources:
         file_name = chunk_file_source["file_name"]
         if file_name not in pdf_content.keys():
             pdf_content[file_name] = read_pdf(file_name)
             pdf_newline_count[file_name] = pdf_content[file_name].count("\n")
-            pdf_content_alpha[file_name] = "".join([i for i in pdf_content[file_name] if i.isalnum()])
+            pdf_content_alpha[file_name] = "".join([i for i in pdf_content[file_name] if i.isalpha()])
+            pdf_alpha_indices[file_name] = [i for i in range(len(pdf_content_alpha[file_name])) if pdf_content_alpha[file_name][i].isalpha()]
     
     # initialize the line number dictionary
     line_numbers = dict()
@@ -214,18 +217,20 @@ def pdf_lines_from_chunks(chunk_file_sources: list):
 
     for chunk_file_source in chunk_file_sources:
         chunk = chunk_file_source["content"]
-        chunk = "".join([i for i in chunk if i.isalnum()])  # Remove non-alpha characters for naive search
+        chunk = "".join([i for i in chunk if i.isalpha()])  # Remove non-alpha characters for naive search
 
         line = None
 
         chunk_filename = chunk_file_source["file_name"]
-        # Find the chunk in the PDF content with naive string search
-        for i in range(len(pdf_content_alpha[chunk_filename]) - len(chunk) + 1):
-            if pdf_content_alpha[chunk_filename][i:i + len(chunk)//10] == chunk[:len(chunk)//10]:
-                if DEBUG: print(f"Found chunk {chunk_file_source['chunk_id']} in file {chunk_file_source['file_name']} at line {i}")
-                #ponderate considering uniform newline distrib
-                line = int(pdf_newline_count[file_name] * i / len(pdf_content_alpha[chunk_filename]))
-                break
+        # Find the chunk in the PDF content with re string matching
+        regex_pattern = re.escape(chunk[:min(70, len(chunk))])  # Use a bit of the chunk for regex matching
+        match = re.search(regex_pattern, pdf_content_alpha[chunk_filename])
+        if match:
+            # If a match is found, calculate the line number
+            start_index = match.start()
+            # Calculate the line number based on the number of newlines before the match
+            #line = pdf_content[chunk_filename][:start_index].count("\n") - pdf_content[chunk_filename][:start_index].count("\n\n") + 1
+            line = pdf_content[chunk_filename][:pdf_alpha_indices[chunk_filename][start_index]].count("\n") - pdf_content[chunk_filename][:pdf_alpha_indices[chunk_filename][start_index]].count("\n\n")
         
         line_numbers[chunk_file_source["chunk_id"]] = line
     
