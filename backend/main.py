@@ -1,7 +1,9 @@
 import argparse
 import asyncio
-from src.test_api_rag import test_rag
-from src.test_api_basic import test_basic
+# from src.test_api_rag import test_rag
+# from src.test_api_basic import test_basic
+from src.api_basic import api_basic
+from src.api_rag import api_rag
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run the FastAPI server with optional RAG or basic mode')
@@ -11,9 +13,14 @@ if __name__ == "__main__":
 
     if args.rag:
         print("Running in RAG mode")
-        asyncio.run(test_rag())
+        api_rag()
+
     elif args.basic:
         print("Running in Basic mode")
-        asyncio.run(test_basic())
+        api_basic()
+
     else:
-        print("Running in default mode")
+        print("Running in default (basic) mode")
+        api_basic()
+
+    exit(1)

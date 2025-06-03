@@ -9,10 +9,11 @@ API_KEY = os.getenv("API_KEY")
 ###########################
 # ENV CONSTS
 DEBUG = True
-HISTORY_FILE_NAME = ".history"
-MOODLE_DIRECTORY = "moodle_pdfs"
+HISTORY_FILE_NAME = ".history.json"
 
+MOODLE_DIRECTORY = "moodle_pdfs"
 COLLECTION_NAME = "moodle_pdfs"
+MODEL_NAME = "albert-small"
 MAX_HISTORY_CHARS = 3000 # Max of number of chars in the history and passed as context
 MAX_MESSAGES_HISTORY = 20 # Max number of messages kept in history and passed as context
 COMMAND_PREFIX = "/" # How to define a command in the chat
@@ -25,13 +26,26 @@ import uvicorn
 from openai import OpenAI
 app = FastAPI()
 
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins="http://localhost:3000",
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from datetime import datetime
+SYSTEM_PROMPT = True
+if (SYSTEM_PROMPT == True):
+    SYSTEM_PROMPT_FILE = "./src/system_prompt.txt"
+    with open(SYSTEM_PROMPT_FILE, "r") as file:
+        system_prompt = "".join(file.readlines()).format(currentDateTime=datetime.now().strftime("%Y-%m-%d"))
+        if DEBUG: print("system prompt", system_prompt) 
 
 ###########################
 # Class to extract prompt from body
@@ -74,6 +88,7 @@ async def root(body: Body):
             "content": chunk_dict["content"],
         })
 
+
     # Get the full chunk
     full_chunk_rag = "\n\n\n".join([chunk_dict["content"] for chunk_dict in chunks_dict_list])
 
@@ -81,10 +96,11 @@ async def root(body: Body):
     if DEBUG: print("Calling OpenAI API...")
     client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
     messages = read_history()
+    if SYSTEM_PROMPT: messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "tool", "content": full_chunk_rag})
     messages.append({"role": "user", "content": prompt})
     data = {
-        "model": "albert-small",
+        "model": MODEL_NAME,
         "messages": messages,
         "stream": False,
         "n": 1,
@@ -97,11 +113,8 @@ async def root(body: Body):
     if DEBUG: print("Applying special command if any...")
     answer = apply_command(response.choices[0].message.content, command, chunk_file_sources)
     if DEBUG: print("Returning answer...")
-    return answer
+    return {"response": answer}
 
-if __name__ == "__main__":
-    if DEBUG: print("Starting FastAPI server...")
-    uvicorn.run(app, host="localhost", port=8000)
 
 def DEBUG_write_file_from_string(file_name: str, content: str, utf_8 : bool = False):
     """
@@ -209,7 +222,7 @@ def apply_command(response: str, command: str, chunk_file_sources: list):
             else:
                 sources.append(f"File: {chunk_file_source['file_name']}, match not found, chunk ID: {chunk_file_source['chunk_id']}.")
         return response + "\n\nSources used :\n" + "\n".join(sources)
-    elif command == "reset":
+    elif (command == "reset"):
         with open(HISTORY_FILE_NAME, "w") as f:
             json.dump([], f)
         return "History reset."
@@ -260,7 +273,7 @@ async def refresh_moodle_collection(collection_id: int):
     session = requests.session()
     session.headers = {"Authorization": f"Bearer {API_KEY}"}
 
-    embeddings_model = "embeddings-small"
+    EMBEDDINGS_MODEL = "embeddings-small"
 
     if collection_id is not None:
         # If the collection exists, we first delete it to refresh it
@@ -268,7 +281,7 @@ async def refresh_moodle_collection(collection_id: int):
         assert response.status_code == 204
 
     # Create a collection for RAG
-    response = session.post(f"{BASE_URL}/collections", json={"name": COLLECTION_NAME, "model": embeddings_model})
+    response = session.post(f"{BASE_URL}/collections", json={"name": COLLECTION_NAME, "model": EMBEDDINGS_MODEL})
     assert response.status_code == 201
     response = response.json()
     collection_id = response["id"]
@@ -299,8 +312,16 @@ async def get_rag_chunks(prompt: str, collection_id : int, k: int = 6, cosine_si
     #chunks_dicts_list = [result["chunk"] for result in response.json()["data"]]
     
     thresholded_chunks_dicts_list = []
-    for result_chunk in response.json()["data"]:
+    for result_chunk in response.json().get("data", ""):
         if result_chunk["score"] >= cosine_similarity_minimum:
             thresholded_chunks_dicts_list.append(result_chunk["chunk"])
 
     return thresholded_chunks_dicts_list
+
+def api_rag():
+    if DEBUG: print("Starting FastAPI server...")
+    uvicorn.run(app, host="localhost", port=8000)
+
+if __name__ == "__main__":
+    api_rag()
+    exit(1)
