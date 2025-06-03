@@ -3,7 +3,7 @@
 import api_rag
 
 async def test_rag():
-  prompt = "/help une variable gaussienne?"
+  prompt = "/explain C'est quoi la définition d'une variable gaussienne multivariée ?"
   res = await api_rag.root(api_rag.Body(prompt=prompt))
   print(res["response"])
 
