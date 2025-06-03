@@ -3,7 +3,7 @@
 import api_rag
 
 async def test_rag():
-  prompt = "/find une variable gaussienne?"
+  prompt = "/help une variable gaussienne?"
   res = await api_rag.root(api_rag.Body(prompt=prompt))
   print(res["response"])
 

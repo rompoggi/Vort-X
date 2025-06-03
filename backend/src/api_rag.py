@@ -67,6 +67,17 @@ async def root(body: Body):
 
     prompt, command = parse_command(body.prompt)
 
+    if command == "help":
+        """Return a help message with available commands"""
+        help_message = (
+            "Available commands:\n"
+            "/source <query> - Shows which Moodle files were used in the agent response.\n"
+            "/reset - Reset the chat history.\n"
+            "/find <extract> - Find which of your Moodle files are related to this extract. Also available by highlighting then \n"
+            "/help - Show this help message."
+        )
+        return {"response": help_message}
+
     collection_id = await get_collection_id()
     #collection_id = await refresh_moodle_collection(collection_id)
     
