@@ -29,6 +29,7 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:3000",
+    "http://localhost:3001",
 ]
 
 app.add_middleware(
@@ -57,6 +58,7 @@ class Body(BaseModel):
 import requests
 import json
 from pypdf import PdfReader
+from tqdm import tqdm
 
 #######################################################################
 #######################################################################
@@ -64,7 +66,7 @@ from pypdf import PdfReader
 @app.post("/")
 async def root(body: Body):
     # TODO add "download from moodle" feature / know when to refresh the collection
-    global system_prompt
+    global system_prompt, CHUNK_GOTTEN
 
     prompt, command = parse_command(body.prompt)
 
@@ -80,7 +82,9 @@ async def root(body: Body):
         return {"response": help_message}
 
     collection_id = await get_collection_id()
-    #collection_id = await refresh_moodle_collection(collection_id)
+    # if (CHUNK_GOTTEN == False):
+    #     collection_id = await refresh_moodle_collection(collection_id)
+    #     CHUNK_GOTTEN = True
     
     # Get the top k chunks from the RAG service
     if DEBUG: print("Getting RAG chunks...")
