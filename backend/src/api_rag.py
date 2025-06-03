@@ -10,8 +10,8 @@ API_KEY = os.getenv("API_KEY")
 # ENV CONSTS
 DEBUG = True
 HISTORY_FILE_NAME = ".history"
+MOODLE_DIRECTORY = "moodle_pdfs"
 
-ASE_URL = "https://albert.api.etalab.gouv.fr/v1"
 COLLECTION_NAME = "moodle_pdfs"
 MAX_HISTORY_CHARS = 3000 # Max of number of chars in the history and passed as context
 MAX_MESSAGES_HISTORY = 20 # Max number of messages kept in history and passed as context
@@ -52,7 +52,7 @@ from pypdf import PdfReader
 async def root(body: Body):
     # TODO add "download from moodle" feature / know when to refresh the collection
     
-    # TODO dont give chunk ID but global position in PDF
+    # TODO FIX dont give chunk ID but global position in PDF
     
     # TODO /web search
 
@@ -102,11 +102,23 @@ async def root(body: Body):
 if __name__ == "__main__":
     if DEBUG: print("Starting FastAPI server...")
     uvicorn.run(app, host="localhost", port=8000)
-    
+
+def DEBUG_write_file_from_string(file_name: str, content: str, utf_8 : bool = False):
+    """
+    Write the content to a .txt file in current directory for debugging purposes.
+    """
+    if not utf_8:
+        with open(file_name, "w") as f:
+            f.write(content)
+    else:
+        with open(file_name, "w", encoding="utf-8") as f:
+            f.write(content)
+    print(f"Written content to {file_name} for debugging purposes.")
+
 def read_pdf(file_name: str):
-    moodle_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moodle_pdfs")
-    reader = PdfReader(os.path.join(moodle_dir, file_name))
-    if DEBUG: print(f"Reading PDF file: {os.path.join(moodle_dir, file_name)}")
+    # Take current directory, go back up one level, and then go to moodle_pdfs directory
+    reader = PdfReader(os.path.join(MOODLE_DIRECTORY, file_name))
+    if DEBUG: print(f"Reading PDF file: {os.path.join(MOODLE_DIRECTORY, file_name)}")
     text = ""
     for page in reader.pages:
         text += page.extract_text() + "\n"
@@ -130,7 +142,7 @@ def write_history(prompt: str, response: str):
     """
     Write the prompt and response to the history.json file.
     """
-    history_file = "history.json"
+    history_file = HISTORY_FILE_NAME
     history = read_history()
     
     # Append the new entry
@@ -168,7 +180,7 @@ def pdf_lines_from_chunks(chunk_file_sources: list):
         chunk = chunk.split(" ", 1)[-1].strip()
 
         line = None
-        
+
         # Find the chunk in the PDF content with naive string search
         for i in range(len(pdf_content[chunk_file_source["file_name"]]) - len(chunk) + 1):
             if pdf_content[chunk_file_source["file_name"]][i:i + len(chunk)] == chunk:
@@ -178,6 +190,10 @@ def pdf_lines_from_chunks(chunk_file_sources: list):
         
         line_numbers[chunk_file_source["chunk_id"]] = line
     
+    # DEBUG write chunk and pdf content to files for debugging
+    DEBUG_write_file_from_string("chunk.txt", "\n\n\n".join([chunk_file_source["content"] for chunk_file_source in chunk_file_sources]), utf_8=True)
+    DEBUG_write_file_from_string("pdf_content.txt", "\n\n\n".join(pdf_content.values()), utf_8=True)
+
     return line_numbers
 
 def apply_command(response: str, command: str, chunk_file_sources: list):
@@ -194,7 +210,7 @@ def apply_command(response: str, command: str, chunk_file_sources: list):
                 sources.append(f"File: {chunk_file_source['file_name']}, match not found, chunk ID: {chunk_file_source['chunk_id']}.")
         return response + "\n\nSources used :\n" + "\n".join(sources)
     elif command == "reset":
-        with open("history.json", "w") as f:
+        with open(HISTORY_FILE_NAME, "w") as f:
             json.dump([], f)
         return "History reset."
     else:
@@ -258,12 +274,11 @@ async def refresh_moodle_collection(collection_id: int):
     collection_id = response["id"]
     
     # Get all pdf files in ./moodle_pdfs/
-    moodle_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moodle_pdfs")
-    pdf_files = [f for f in os.listdir(moodle_dir) if f.endswith(".pdf")]
+    pdf_files = [f for f in os.listdir(MOODLE_DIRECTORY) if f.endswith(".pdf")]
 
     # Add all pdf files to the collection
     for file_local_path in pdf_files:
-        file_path = os.path.join(moodle_dir, file_local_path)
+        file_path = os.path.join(MOODLE_DIRECTORY, file_local_path)
         files = {"file": (os.path.basename(file_path), open(file_path, "rb"), "application/pdf")}
         data = {"request": '{"collection": "%s"}' % collection_id}
         response = session.post(f"{BASE_URL}/files", data=data, files=files)
