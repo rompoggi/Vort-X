@@ -106,7 +106,9 @@ def create_moodle_config(
         "download_linked_files": download_linked_files,
         "download_also_with_cookie": download_also_with_cookie
     }
-    file_path = config_path + '/' + config_file_name
+    #file_path = config_path + '/' + config_file_name
+    # Clean file path creation with os
+    file_path = os.path.join(os.path.abspath(config_path), config_file_name)
     with open(file_path, 'w') as f:
         json.dump(config, f, indent=4)
     
@@ -453,9 +455,9 @@ app.add_middleware(
 from pydantic import BaseModel
 class BodyMoodle(BaseModel):
     username: str
-    session: str;
-    password: str;
-    action: str;
+    session: str
+    password: str
+    action: str
 
 @app.post("/")
 async def root(body: BodyMoodle):

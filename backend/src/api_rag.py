@@ -11,7 +11,7 @@ API_KEY = os.getenv("API_KEY")
 DEBUG = True
 HISTORY_FILE_NAME = ".history.json"
 
-MOODLE_DIRECTORY = "moodle_pdfs"
+MOODLE_DIRECTORY = "moodle_storage/Moodle_files"
 COLLECTION_NAME = "moodle_pdfs"
 MODEL_NAME = "albert-small"
 MAX_HISTORY_CHARS = 3000 # Max of number of chars in the history and passed as context
@@ -316,13 +316,18 @@ async def refresh_moodle_collection(collection_id: int):
     pdf_files = [f for f in os.listdir(MOODLE_DIRECTORY) if f.endswith(".pdf")]
 
     # Add all pdf files to the collection
-    for file_local_path in pdf_files:
+    for file_local_path in pdf_files[:20]: # TODO remove limitations and do multiple collections
+        # If file more than 20 MB, skip it
         file_path = os.path.join(MOODLE_DIRECTORY, file_local_path)
+        if os.path.getsize(file_path) > 20000000:
+            continue
         files = {"file": (os.path.basename(file_path), open(file_path, "rb"), "application/pdf")}
         data = {"request": '{"collection": "%s"}' % collection_id}
         response = session.post(f"{BASE_URL}/files", data=data, files=files)
-        assert response.status_code == 201
-    
+        if response.status_code != 201:
+            print(f"Error uploading file {file_local_path}: {response.status_code} - {response.text}")
+            continue
+
     return collection_id
 
 

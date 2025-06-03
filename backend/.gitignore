@@ -5,6 +5,7 @@ history.json
 .env
 *.secret
 moodle_pdfs
+moodle_storage
 __pycache__
 venv
 /node_modules/
