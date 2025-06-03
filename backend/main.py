@@ -1,7 +1,5 @@
 import argparse
 import asyncio
-# from src.test_api_rag import test_rag
-# from src.test_api_basic import test_basic
 from src.api_basic import api_basic
 from src.api_rag import api_rag
 
