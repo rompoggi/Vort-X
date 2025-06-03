@@ -470,8 +470,7 @@ async def root(body: BodyMoodle):
 
     if (action == "update"):
         download_new_files(download_path=OUT_FILE, moodle_url=moodle_url, username=username, password=password)
-
-    if (action == "reset"):
+    elif (action == "reset"):
         download_all_files(download_path=OUT_FILE, moodle_url=moodle_url, username=username, password=password)
     return
 

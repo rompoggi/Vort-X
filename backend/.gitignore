@@ -1,5 +1,9 @@
 .history.json
 history.json
+moodle_storage
+moodle_storage/*
+.moodle_storage
+.moodle_storage/*
 
 .venv
 .env
