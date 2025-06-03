@@ -1,3 +1,5 @@
+.history.json
+
 .venv
 .env
 *.secret

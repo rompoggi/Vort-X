@@ -1,41 +1,52 @@
+###########################
+# LOAD API KEYS
+import os
+import dotenv
+dotenv.load_dotenv()
+BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
+API_KEY = os.getenv("API_KEY")
+
+###########################
+# ENV CONSTS
+DEBUG = True
+HISTORY_FILE_NAME = ".history"
+
+ASE_URL = "https://albert.api.etalab.gouv.fr/v1"
+COLLECTION_NAME = "moodle_pdfs"
+MAX_HISTORY_CHARS = 3000 # Max of number of chars in the history and passed as context
+MAX_MESSAGES_HISTORY = 20 # Max number of messages kept in history and passed as context
+COMMAND_PREFIX = "/" # How to define a command in the chat
+
+###########################
+# Create a FastAPI instance
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-import os
 from openai import OpenAI
-from pydantic import BaseModel
-import requests
-import json
-from pypdf import PdfReader
-
-BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
-COLLECTION_NAME = "moodle_pdfs"
-MAX_HISTORY_CHARS = 3000
-MAX_MESSAGES_HISTORY = 20
-COMMAND_PREFIX = "/"
-
-# import API from backend/api_key.secret which is a .txt file containing the API key
-# so we read backend/api_key.secret file
-with open("backend/api_key.secret", "r") as f:
-    API_KEY = f.read().strip()
-    
 app = FastAPI()
-
-origins = [
-    "http://localhost",
-    "http://localhost:3000",
-]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins="http://localhost:3000",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+###########################
+# Class to extract prompt from body
+from pydantic import BaseModel
 class Body(BaseModel):
     prompt: str
+
+###########################
+# Other imports
+import requests
+import json
+from pypdf import PdfReader
+
+#######################################################################
+#######################################################################
 
 @app.post("/")
 async def root(body: Body):
@@ -51,7 +62,7 @@ async def root(body: Body):
     #collection_id = await refresh_moodle_collection(collection_id)
     
     # Get the top k chunks from the RAG service
-    print("Getting RAG chunks...")
+    if DEBUG: print("Getting RAG chunks...")
     chunks_dict_list = await get_rag_chunks(prompt, collection_id, k=6)
     
     # Source the chunks from the RAG service
@@ -67,7 +78,7 @@ async def root(body: Body):
     full_chunk_rag = "\n\n\n".join([chunk_dict["content"] for chunk_dict in chunks_dict_list])
 
     # Call the OpenAI API with the full chunk and the prompt
-    print("Calling OpenAI API...")
+    if DEBUG: print("Calling OpenAI API...")
     client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
     messages = read_history()
     messages.append({"role": "tool", "content": full_chunk_rag})
@@ -83,30 +94,30 @@ async def root(body: Body):
     # History ici, vu que l'apply command n'est pas un résultat du LLM
     write_history(prompt, response.choices[0].message.content)    
 
-    print("Applying special command if any...")
+    if DEBUG: print("Applying special command if any...")
     answer = apply_command(response.choices[0].message.content, command, chunk_file_sources)
-    print("Returning answer...")
+    if DEBUG: print("Returning answer...")
     return answer
 
 if __name__ == "__main__":
-    print("Starting FastAPI server...")
+    if DEBUG: print("Starting FastAPI server...")
     uvicorn.run(app, host="localhost", port=8000)
     
 def read_pdf(file_name: str):
     moodle_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "moodle_pdfs")
     reader = PdfReader(os.path.join(moodle_dir, file_name))
-    print(f"Reading PDF file: {os.path.join(moodle_dir, file_name)}")
+    if DEBUG: print(f"Reading PDF file: {os.path.join(moodle_dir, file_name)}")
     text = ""
     for page in reader.pages:
         text += page.extract_text() + "\n"
-    print(f"Read {len(reader.pages)} pages from PDF file.")
+    if DEBUG: print(f"Read {len(reader.pages)} pages from PDF file.")
     return text
 
 def read_history():
     """
     Read the history from the history.json file.
     """
-    history_file = "history.json"
+    history_file = HISTORY_FILE_NAME
     if not os.path.exists(history_file):
         return []
     
@@ -126,7 +137,7 @@ def write_history(prompt: str, response: str):
     history.append({"role": "user", "content": prompt})
     history.append({"role": "assistant", "content": response})
     
-        # Make sure the history does not exceed the MAX_TOKEN_HISTORY
+    # Make sure the history does not exceed the MAX_TOKEN_HISTORY
     # Compute total number of characters in the history
     total_chars = sum(len(entry["content"]) for entry in history)
     # On garde au minimum 4 entries (2 user and 2 assistant) pour le contexte
@@ -161,7 +172,7 @@ def pdf_lines_from_chunks(chunk_file_sources: list):
         # Find the chunk in the PDF content with naive string search
         for i in range(len(pdf_content[chunk_file_source["file_name"]]) - len(chunk) + 1):
             if pdf_content[chunk_file_source["file_name"]][i:i + len(chunk)] == chunk:
-                print(f"Found chunk {chunk_file_source['chunk_id']} in file {chunk_file_source['file_name']} at line {i}")
+                if DEBUG: print(f"Found chunk {chunk_file_source['chunk_id']} in file {chunk_file_source['file_name']} at line {i}")
                 line = pdf_content[chunk_file_source["file_name"]][:i].count("\n") + 1
                 break
         
@@ -260,7 +271,7 @@ async def refresh_moodle_collection(collection_id: int):
     
     return collection_id
 
-    
+
 async def get_rag_chunks(prompt: str, collection_id : int, k: int = 6, cosine_similarity_minimum: float = 0.5):
     # Connect to the session
     session = requests.session()
@@ -278,4 +289,3 @@ async def get_rag_chunks(prompt: str, collection_id : int, k: int = 6, cosine_si
             thresholded_chunks_dicts_list.append(result_chunk["chunk"])
 
     return thresholded_chunks_dicts_list
-

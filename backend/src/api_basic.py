@@ -1,16 +1,21 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-import os
-from openai import OpenAI
-from pydantic import BaseModel
-
+###########################
 # LOAD API KEYS
+import os
 import dotenv
 dotenv.load_dotenv()
 BASE_URL = "https://albert.api.etalab.gouv.fr/v1"
 API_KEY = os.getenv("API_KEY")
 
+###########################
+# ENV CONSTS
+DEBUG = True
+
+###########################
+# Create a FastAPI instance
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+from openai import OpenAI
 app = FastAPI()
 
 origins = [
@@ -26,12 +31,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+###########################
+# Class to extract prompt from body
+from pydantic import BaseModel
 class Body(BaseModel):
     prompt: str
 
+###########################
+# Other imports
+
+#######################################################################
+#######################################################################
+
 @app.post("/")
 async def root(body: Body):
-    # TODO add RAG from the server-side storage
     client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
     data = {
         "model": "albert-small",
@@ -40,11 +53,9 @@ async def root(body: Body):
         "n": 1,
     }
     response = client.chat.completions.create(**data)
-    return response.choices[0].message.content
+    # if DEBUG: print(response.choices[0].message.content)
+    return {"response": response.choices[0].message.content}
 
 if __name__ == "__main__":
-    print("Starting FastAPI server...")
+    if DEBUG: print("Starting FastAPI server...")
     uvicorn.run(app, host="localhost", port=8000)
-    
-
-    
