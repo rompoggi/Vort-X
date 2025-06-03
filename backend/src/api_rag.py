@@ -66,7 +66,7 @@ from tqdm import tqdm
 @app.post("/")
 async def root(body: Body):
     # TODO add "download from moodle" feature / know when to refresh the collection
-    global system_prompt, CHUNK_GOTTEN
+    global system_prompt
 
     prompt, command = parse_command(body.prompt)
 
@@ -238,7 +238,7 @@ def sources_from_chunks(chunk_file_sources: list):
     line_sources = pdf_lines_from_chunks(chunk_file_sources)
     for i, chunk_file_source in enumerate(chunk_file_sources):
         if line_sources[chunk_file_source['chunk_id']] is not None:
-            sources.append(f"File: {chunk_file_source['file_name']}, around {line_sources[chunk_file_source['chunk_id']]}.")
+            sources.append(f"File: {chunk_file_source['file_name']}, around line {line_sources[chunk_file_source['chunk_id']]}.")
         else:
             sources.append(f"File: {chunk_file_source['file_name']}, line not found (common in LaTeX pdfs).")
     return sources
