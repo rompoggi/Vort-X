@@ -53,6 +53,7 @@ if (SYSTEM_PROMPT == True):
 from pydantic import BaseModel
 class Body(BaseModel):
     prompt: str
+    context: str
 
 ###########################
 # Other imports
@@ -66,7 +67,6 @@ from tqdm import tqdm
 
 @app.post("/")
 async def root(body: Body):
-    # TODO add "download from moodle" feature / know when to refresh the collection
     global system_prompt
 
     prompt, command = parse_command(body.prompt)
@@ -109,15 +109,14 @@ async def root(body: Body):
     # Add explain prompt
     if command == "explain":
         system_prompt_explain = """\n\nYou are an expert in explaining concepts.\nYou will be given a text and you must explain it in simple terms, as if you were explaining it to a beginner in the field.\nYou must provide a clear and concise explanation.\nYou must not assume anything is true before detailing why it is true.\nYou must be sure to explain all the concepts in the text, even if they seem obvious.\nTake your time and explain little bit by little bit every part of the answer, especially when you introduce a new concept.\n\n"""
-        if SYSTEM_PROMPT:
-            system_prompt += system_prompt_explain
 
     # Call the OpenAI API with the full chunk and the prompt
     if DEBUG: print("Calling OpenAI API...")
     client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
     messages = read_history()
     if SYSTEM_PROMPT: messages.append({"role": "system", "content": system_prompt})
-    elif command == "explain": messages.append({"role": "system", "content": system_prompt_explain})
+    messages.append({"role": "context", "content": body.context})  # Add the context from the body
+    if command == "explain": messages.append({"role": "system", "content": system_prompt_explain})
     messages.append({"role": "tool", "content": full_chunk_rag})
     messages.append({"role": "user", "content": prompt})
     data = {
