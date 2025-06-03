@@ -84,7 +84,7 @@ async def root(body: Body):
         })
 
     if command == "find":
-        return {"response": "\n".join(sources_from_chunks(chunk_file_sources))}
+        return {"response": "Sources related to the input text:\n" + "\n".join(sources_from_chunks(chunk_file_sources))}
 
     # Get the full chunk
     full_chunk_rag = "\n\n\n".join([chunk_dict["content"] for chunk_dict in chunks_dict_list])
