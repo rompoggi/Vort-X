@@ -11,7 +11,8 @@ API_KEY = os.getenv("API_KEY")
 DEBUG = True
 HISTORY_FILE_NAME = ".history.json"
 
-MOODLE_DIRECTORY = "moodle_pdfs"
+MOODLE_DIRECTORY = "moodle_storage/Moodle_files"
+CHUNK_GOTTEN = False
 COLLECTION_NAME = "moodle_pdfs"
 MODEL_NAME = "albert-small"
 MAX_HISTORY_CHARS = 3000 # Max of number of chars in the history and passed as context
@@ -29,6 +30,7 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:3000",
+    "http://localhost:3001",
 ]
 
 app.add_middleware(
@@ -57,6 +59,7 @@ class Body(BaseModel):
 import requests
 import json
 from pypdf import PdfReader
+from tqdm import tqdm
 
 #######################################################################
 #######################################################################
@@ -64,7 +67,7 @@ from pypdf import PdfReader
 @app.post("/")
 async def root(body: Body):
     # TODO add "download from moodle" feature / know when to refresh the collection
-    global system_prompt
+    global system_prompt, CHUNK_GOTTEN
 
     prompt, command = parse_command(body.prompt)
 
@@ -80,7 +83,9 @@ async def root(body: Body):
         return {"response": help_message}
 
     collection_id = await get_collection_id()
-    #collection_id = await refresh_moodle_collection(collection_id)
+    # if (CHUNK_GOTTEN == False):
+    #     collection_id = await refresh_moodle_collection(collection_id)
+    #     CHUNK_GOTTEN = True
     
     # Get the top k chunks from the RAG service
     if DEBUG: print("Getting RAG chunks...")
@@ -316,7 +321,8 @@ async def refresh_moodle_collection(collection_id: int):
     pdf_files = [f for f in os.listdir(MOODLE_DIRECTORY) if f.endswith(".pdf")]
 
     # Add all pdf files to the collection
-    for file_local_path in pdf_files:
+    for file_local_path in tqdm(pdf_files, desc="Uploading PDF files"):
+        print(file_local_path)
         file_path = os.path.join(MOODLE_DIRECTORY, file_local_path)
         files = {"file": (os.path.basename(file_path), open(file_path, "rb"), "application/pdf")}
         data = {"request": '{"collection": "%s"}' % collection_id}
