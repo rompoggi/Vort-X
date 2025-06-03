@@ -45,7 +45,6 @@ if (SYSTEM_PROMPT == True):
     SYSTEM_PROMPT_FILE = "./src/system_prompt.txt"
     with open(SYSTEM_PROMPT_FILE, "r") as file:
         system_prompt = "".join(file.readlines()).format(currentDateTime=datetime.now().strftime("%Y-%m-%d"))
-        if DEBUG: print("system prompt", system_prompt) 
 
 ###########################
 # Class to extract prompt from body
@@ -65,8 +64,6 @@ from pypdf import PdfReader
 @app.post("/")
 async def root(body: Body):
     # TODO add "download from moodle" feature / know when to refresh the collection
-    
-    # TODO FIX dont give chunk ID but global position in PDF
     
     # TODO /web search
 
@@ -179,33 +176,38 @@ def write_history(prompt: str, response: str):
 def pdf_lines_from_chunks(chunk_file_sources: list):
     # Read the PDF file
     pdf_content = dict()
+    pdf_newline_count = dict()
+    pdf_content_alpha = dict()
     for chunk_file_source in chunk_file_sources:
         file_name = chunk_file_source["file_name"]
         if file_name not in pdf_content.keys():
             pdf_content[file_name] = read_pdf(file_name)
+            pdf_newline_count[file_name] = pdf_content[file_name].count("\n")
+            pdf_content_alpha[file_name] = "".join([i for i in pdf_content[file_name] if i.isalnum()])
     
     # initialize the line number dictionary
     line_numbers = dict()
+    
+    if DEBUG: print("Searching for chunks in PDF content...")
 
     for chunk_file_source in chunk_file_sources:
-        # skip first word to avoid cutting issues
         chunk = chunk_file_source["content"]
-        chunk = chunk.split(" ", 1)[-1].strip()
+        chunk = "".join([i for i in chunk if i.isalnum()])  # Remove non-alpha characters for naive search
 
         line = None
 
+        chunk_filename = chunk_file_source["file_name"]
         # Find the chunk in the PDF content with naive string search
-        for i in range(len(pdf_content[chunk_file_source["file_name"]]) - len(chunk) + 1):
-            if pdf_content[chunk_file_source["file_name"]][i:i + len(chunk)] == chunk:
+        for i in range(len(pdf_content_alpha[chunk_filename]) - len(chunk) + 1):
+            if pdf_content_alpha[chunk_filename][i:i + len(chunk)//10] == chunk[:len(chunk)//10]:
                 if DEBUG: print(f"Found chunk {chunk_file_source['chunk_id']} in file {chunk_file_source['file_name']} at line {i}")
-                line = pdf_content[chunk_file_source["file_name"]][:i].count("\n") + 1
+                #ponderate considering uniform newline distrib
+                line = int(pdf_newline_count[file_name] * i / len(pdf_content_alpha[chunk_filename]))
                 break
         
         line_numbers[chunk_file_source["chunk_id"]] = line
     
-    # DEBUG write chunk and pdf content to files for debugging
-    DEBUG_write_file_from_string("chunk.txt", "\n\n\n".join([chunk_file_source["content"] for chunk_file_source in chunk_file_sources]), utf_8=True)
-    DEBUG_write_file_from_string("pdf_content.txt", "\n\n\n".join(pdf_content.values()), utf_8=True)
+    if DEBUG: print("Finished searching for chunks in PDF content.")
 
     return line_numbers
 
@@ -218,9 +220,9 @@ def apply_command(response: str, command: str, chunk_file_sources: list):
         line_sources = pdf_lines_from_chunks(chunk_file_sources)
         for i, chunk_file_source in enumerate(chunk_file_sources):
             if line_sources[chunk_file_source['chunk_id']] is not None:
-                sources.append(f"File: {chunk_file_source['file_name']}, from line {line_sources[chunk_file_source['chunk_id']]} onwards.")
+                sources.append(f"File: {chunk_file_source['file_name']}, around {line_sources[chunk_file_source['chunk_id']]}.")
             else:
-                sources.append(f"File: {chunk_file_source['file_name']}, match not found, chunk ID: {chunk_file_source['chunk_id']}.")
+                sources.append(f"File: {chunk_file_source['file_name']}, line not found (common in LaTeX pdfs).")
         return response + "\n\nSources used :\n" + "\n".join(sources)
     elif (command == "reset"):
         with open(HISTORY_FILE_NAME, "w") as f:
