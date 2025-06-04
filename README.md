@@ -1,2 +1,1 @@
-# Vort'X
- suitenumerique hackathon Vort'X
+Backend for the EDU-DOCs project of the Hackdays hackathon.
